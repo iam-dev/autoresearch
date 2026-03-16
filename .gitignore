@@ -10,6 +10,7 @@ wheels/
 # Virtual environments
 .venv
 worktrees/
+.worktrees/
 results/
 queue/
 
@@ -17,6 +18,7 @@ queue/
 CLAUDE.md
 AGENTS.md
 .claude
+docs/superpowers
 
 # Experimental code/artifacts
 dev/
