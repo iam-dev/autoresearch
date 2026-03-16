@@ -5,8 +5,9 @@ All tests run on any platform (Linux, Mac, CI without GPU).
 No GPU required — torch.cuda.is_available() is mocked.
 """
 from __future__ import annotations
-import sys
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import MagicMock
+
 import pytest
 
 

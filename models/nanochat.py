@@ -8,7 +8,6 @@ lambdas, logit softcapping), and MuonAdamW optimizer.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import torch
@@ -299,7 +298,7 @@ class GPT(nn.Module):
 
     def forward(self, idx, targets=None, reduction='mean'):
         B, T = idx.size()
-        assert T <= self.cos.size(1)
+        assert self.cos.size(1) >= T
         cos_sin = self.cos[:, :T], self.sin[:, :T]
 
         x = self.transformer.wte(idx)

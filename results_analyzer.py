@@ -15,7 +15,7 @@ import argparse
 import json
 import math
 import statistics
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 RESULTS_DIR = Path("results")
@@ -309,7 +309,7 @@ def generate_comparison(phase: str = "full", threshold: float | None = None) -> 
         "protocol": "protocol_1",
         "phase": phase,
         "n_seeds": min(len(v.get("best_per_seed", [])) for v in condition_stats.values()),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "conditions": conditions_output,
         "pairwise_tests": pairwise,
         "promotion_criteria": criteria,
@@ -351,7 +351,6 @@ def generate_plots() -> None:
         if not runs:
             continue
         by_seed = load_runs_by_seed(cond)
-        non_div = [r for r in runs if not r["results"].get("diverged", False)]
         best_per_seed = []
         for seed_runs in by_seed.values():
             nd = [r for r in seed_runs if not r["results"].get("diverged", False)]

@@ -6,6 +6,7 @@ Usage: uv run train.py
 
 import contextlib
 import os
+
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
@@ -18,11 +19,11 @@ from pathlib import Path
 
 import torch
 
+from mnemebrain_hooks import RunConfig, RunResults, create_hooks
+from models import create_model
+from models.nanochat import GPT, build_model_config
 from platform_config import PLATFORM
-from models import create_model, REGISTRY
-from models.nanochat import GPT, GPTConfig, MuonAdamW, build_model_config
-from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, make_dataloader, evaluate_bpb
-from mnemebrain_hooks import create_hooks, RunConfig, RunResults
+from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, evaluate_bpb, make_dataloader
 
 MODEL_NAME = os.environ.get("AUTORESEARCH_MODEL", "nanochat")
 
@@ -36,11 +37,11 @@ def load_platform_config():
     try:
         with open(config_path, "rb") as f:
             return tomllib.load(f)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         raise SystemExit(
             f"[autoresearch] Config file not found: {config_path}\n"
             f"Run 'git checkout configs/' to restore it."
-        )
+        ) from e
 
 _cfg = load_platform_config()
 
@@ -191,9 +192,10 @@ grad_norm_max = 0.0
 loss_history: list[float] = []  # smoothed loss at each step, for trend computation
 
 while True:
-    if PLATFORM.kind == "cuda": torch.cuda.synchronize()
+    if PLATFORM.kind == "cuda":
+        torch.cuda.synchronize()
     t0 = time.time()
-    for micro_step in range(grad_accum_steps):
+    for _micro_step in range(grad_accum_steps):
         with autocast_ctx:
             loss = model(x, y)
         train_loss = loss.detach()
@@ -236,7 +238,8 @@ while True:
         )
         exit(1)
 
-    if PLATFORM.kind == "cuda": torch.cuda.synchronize()
+    if PLATFORM.kind == "cuda":
+        torch.cuda.synchronize()
     t1 = time.time()
     dt = t1 - t0
 

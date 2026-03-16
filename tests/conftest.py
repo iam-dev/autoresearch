@@ -9,7 +9,6 @@ Markers:
   mps         — requires Apple Silicon
   cpu         — runs on any platform (CPU fallback)
 """
-import sys
 import pytest
 
 from hooks.types import RunConfig, RunResults

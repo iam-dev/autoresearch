@@ -6,15 +6,14 @@ from pathlib import Path
 import pytest
 
 from results_analyzer import (
+    _check_stability,
+    _check_telemetry_completeness,
     cohens_d,
     generate_comparison,
     generate_plots,
     generate_summary,
     load_runs,
     load_runs_by_seed,
-    _check_stability,
-    _check_telemetry_completeness,
-    RESULTS_DIR,
 )
 
 

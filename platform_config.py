@@ -19,14 +19,11 @@ Supported platforms:
 
 from __future__ import annotations
 
-import os
 import sys
-import platform as _platform
 from dataclasses import dataclass
 from typing import Literal
 
 import torch
-
 
 PlatformKind = Literal["cuda", "mps", "cpu"]
 

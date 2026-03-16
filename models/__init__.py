@@ -1,6 +1,8 @@
 """Model registry for autoresearch."""
-from models.nanochat import GPT as NanochatGPT, GPTConfig as NanochatConfig, MuonAdamW
 from models.gpt2 import GPT2, GPT2Config
+from models.nanochat import GPT as NanochatGPT
+from models.nanochat import GPTConfig as NanochatConfig
+from models.nanochat import MuonAdamW as MuonAdamW
 
 REGISTRY = {
     "nanochat": (NanochatGPT, NanochatConfig),

@@ -72,3 +72,18 @@ markers = [
     "slow: marks tests as slow",
 ]
 addopts = "-m 'not e2e'"
+
+[tool.coverage.run]
+omit = [
+    "hooks/condition_c.py",  # requires mnemebrain-lite (tested in e2e suite)
+    "hooks/condition_d.py",  # requires mnemebrain SDK (tested in e2e suite)
+    "analysis.ipynb",
+    "prepare.py",
+    "train.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]

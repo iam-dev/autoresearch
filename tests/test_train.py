@@ -4,7 +4,9 @@ tests/test_train.py — baseline tests for model components in models/nanochat.p
 These tests run on CPU without requiring Flash Attention 3 or a GPU.
 """
 from __future__ import annotations
+
 import importlib
+
 import pytest
 
 # Skip the entire module if torch is not installed (e.g. on macOS dev machines
@@ -71,6 +73,7 @@ def test_gpt_forward_shape():
     Output shape: (B, T, vocab_size) logits when targets=None
     """
     import torch
+
     from models.nanochat import GPT  # noqa: PLC0415
     cfg = _tiny_config()
     model = GPT(cfg)
@@ -91,6 +94,7 @@ def test_gpt_forward_shape():
 def test_gpt_loss_finite():
     """Forward pass with targets returns a finite scalar cross-entropy loss."""
     import torch
+
     from models.nanochat import GPT  # noqa: PLC0415
     cfg = _tiny_config()
     model = GPT(cfg)
@@ -116,7 +120,6 @@ def test_optimizer_creation():
     - 'adamw' kind for embeddings, unembedding, value embeddings, scalars
     - 'muon' kind for 2-D matrix parameters (one group per unique shape)
     """
-    import torch
     from models.nanochat import GPT, MuonAdamW  # noqa: PLC0415
     cfg = _tiny_config()
     model = GPT(cfg)
@@ -144,6 +147,7 @@ def test_one_training_step():
     - optimizer.step() runs without raising
     """
     import torch
+
     from models.nanochat import GPT  # noqa: PLC0415
     cfg = _tiny_config()
     model = GPT(cfg)

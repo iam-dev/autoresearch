@@ -56,7 +56,8 @@ def create_hooks(condition: str | None = None, seed: int | None = None) -> Exper
     kwargs: dict = {}
     if seed is not None:
         kwargs["seed"] = seed
-    return cls(**kwargs)
+    hooks = cls(**kwargs)
+    return hooks  # type: ignore[return-value]
 
 
 __all__ = [

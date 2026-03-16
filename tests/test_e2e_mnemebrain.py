@@ -16,7 +16,7 @@ mnemebrain_core = pytest.importorskip(
     reason="mnemebrain-lite not installed (requires Python 3.12+)",
 )
 
-from hooks import PassiveHooks, RunConfig, RunResults, evidence_weight
+from hooks import PassiveHooks, RunConfig, RunResults, evidence_weight  # noqa: E402
 
 
 @pytest.fixture

@@ -146,7 +146,7 @@ class GPT2(nn.Module):
     def forward(self, idx: torch.Tensor, targets: torch.Tensor | None = None,
                 reduction: str = 'mean') -> torch.Tensor:
         B, T = idx.size()
-        assert T <= self.config.sequence_len, (
+        assert self.config.sequence_len >= T, (
             f"Sequence length {T} exceeds model max {self.config.sequence_len}"
         )
         pos = torch.arange(T, dtype=torch.long, device=idx.device)

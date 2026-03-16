@@ -4,7 +4,9 @@ tests/test_model_registry.py — tests for models/ package registry and factory.
 All tests run on CPU without requiring Flash Attention 3 or a GPU.
 """
 from __future__ import annotations
+
 import importlib
+
 import pytest
 
 # Skip the entire module if torch is not installed (e.g. on macOS dev machines
@@ -77,6 +79,7 @@ def test_unknown_model_raises():
 def test_nanochat_forward_cpu():
     """Tiny nanochat model forward pass on CPU returns correct shapes."""
     import torch  # noqa: PLC0415
+
     from models.nanochat import GPT, GPTConfig  # noqa: PLC0415
     cfg = GPTConfig(
         sequence_len=32,
@@ -113,6 +116,7 @@ def test_nanochat_forward_cpu():
 def test_gpt2_forward_cpu():
     """Tiny GPT-2 model forward pass on CPU returns correct shapes."""
     import torch  # noqa: PLC0415
+
     from models.gpt2 import GPT2, GPT2Config  # noqa: PLC0415
     cfg = GPT2Config(
         sequence_len=64,
