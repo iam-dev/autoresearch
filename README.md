@@ -51,7 +51,19 @@ See [docs/platform-support.md](docs/platform-support.md) for detailed platform i
 
 ## Running the agent
 
-Simply spin up your Claude/Codex or whatever you want in this repo (and disable all permissions), then you can prompt something like:
+The easiest way to launch is with the included `launch.sh` script, which activates the ML researcher persona automatically:
+
+```bash
+# Interactive mode — opens Claude Code with the researcher persona
+./launch.sh
+
+# One-shot mode — pass a prompt directly
+./launch.sh "Hi have a look at program.md and let's kick off a new experiment! let's do the setup first."
+```
+
+The script uses `--append-system-prompt-file` to inject `persona.md` (ML researcher identity, experiment prioritization, anti-patterns) on top of the default Claude Code system prompt. It also enables `--allow-dangerously-skip-permissions` so the agent can run autonomously without approval prompts.
+
+Alternatively, spin up Claude/Codex manually in this repo and prompt something like:
 
 ```
 Hi have a look at program.md and let's kick off a new experiment! let's do the setup first.
