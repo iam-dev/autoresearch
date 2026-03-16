@@ -1,17 +1,13 @@
 """Tests for hooks/artifacts.py — run result I/O."""
 
 import json
-from pathlib import Path
 
-import pytest
-
-from hooks.types import RunConfig, RunResults, PreRunContext
-from hooks import artifacts
 from hooks.artifacts import (
-    _next_run_id,
     _best_val_bpb,
+    _next_run_id,
     _write_run_result,
 )
+from hooks.types import PreRunContext, RunConfig
 
 
 class TestNextRunId:

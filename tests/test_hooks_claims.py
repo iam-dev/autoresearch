@@ -2,8 +2,8 @@
 
 import pytest
 
+from hooks.claims import ClaimBuilder, StructuredClaim
 from hooks.types import RunConfig, RunResults
-from hooks.claims import StructuredClaim, ClaimBuilder
 
 
 class TestStructuredClaim:

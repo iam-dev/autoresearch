@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from hooks.types import (
-    PreRunContext, PredictionResult, RecommendationResult,
-    RunConfig, RunResults,
-)
 from hooks import artifacts
-from hooks.log_capture import LogCapture
-from hooks.analysis import evidence_weight, _config_distance
+from hooks.analysis import evidence_weight
 from hooks.claims import ClaimBuilder
+from hooks.log_capture import LogCapture
+from hooks.types import (
+    PredictionResult,
+    PreRunContext,
+    RecommendationResult,
+    RunConfig,
+    RunResults,
+)
 
 
 class ActiveHooks:
@@ -29,11 +32,11 @@ class ActiveHooks:
             try:
                 from mnemebrain import MnemeBrainClient
                 self._client = MnemeBrainClient(base_url=self._base_url)
-            except ImportError:
+            except ImportError as e:
                 raise ImportError(
                     "Condition D requires mnemebrain. "
                     "Install with: pip install mnemebrain"
-                )
+                ) from e
         return self._client
 
     def pre_run(self, config: RunConfig) -> PreRunContext:
@@ -67,21 +70,21 @@ class ActiveHooks:
             print(f"[Condition D] Warning: belief query failed: {e}")
 
         if prediction:
-            print(f"\n[Condition D] Prediction:")
+            print("\n[Condition D] Prediction:")
             print(f"  Expected outcome: {prediction.expected_outcome}")
             print(f"  Confidence: {prediction.confidence:.2f}")
             if prediction.risks:
                 print(f"  Risks: {', '.join(prediction.risks)}")
 
         if recommendation:
-            print(f"\n[Condition D] Recommendation:")
+            print("\n[Condition D] Recommendation:")
             print(f"  {recommendation.suggested_change}")
             print(f"  Risk level: {recommendation.risk_level}")
             for r in recommendation.rationale:
                 print(f"    - {r}")
 
         if contradictions:
-            print(f"\n[Condition D] Contradictions:")
+            print("\n[Condition D] Contradictions:")
             for c in contradictions:
                 print(f"  {c}")
 

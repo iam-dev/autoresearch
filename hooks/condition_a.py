@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from hooks.types import PreRunContext, RunConfig, RunResults
 from hooks import artifacts
 from hooks.log_capture import LogCapture
+from hooks.types import PreRunContext, RunConfig, RunResults
 
 
 class NullHooks:

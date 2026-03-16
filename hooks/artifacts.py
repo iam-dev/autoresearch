@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from hooks.types import PreRunContext, RunConfig, RunResults
@@ -34,9 +34,8 @@ def _best_val_bpb(run_dir: Path) -> float | None:
         try:
             data = json.loads(f.read_text())
             vbpb = data["results"]["val_bpb"]
-            if not data["results"].get("diverged", False):
-                if best is None or vbpb < best:
-                    best = vbpb
+            if not data["results"].get("diverged", False) and (best is None or vbpb < best):
+                best = vbpb
         except (json.JSONDecodeError, KeyError):
             continue
     return best
@@ -71,7 +70,7 @@ def _write_run_result(
         "run_id": run_id,
         "condition": condition,
         "seed": seed,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "config": config_dict,
         "results": asdict(results),
         "rationale_tag": config.rationale_tag,

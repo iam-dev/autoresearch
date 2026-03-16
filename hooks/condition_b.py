@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from hooks.types import PreRunContext, RunConfig, RunResults
 from hooks import artifacts
 from hooks.log_capture import LogCapture
+from hooks.types import PreRunContext, RunConfig, RunResults
 
 
 class LoggingHooks:
@@ -72,7 +72,7 @@ class LoggingHooks:
     def _make_summary(self, run_id: int, seed: int, config: RunConfig, results: RunResults) -> dict:
         return {
             "run_id": run_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "seed": seed,
             "config": {
                 "matrix_lr": config.matrix_lr,

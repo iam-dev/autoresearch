@@ -39,7 +39,7 @@ class LogCapture:
         """Begin capturing. Creates log_dir if needed. Returns path to log file."""
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / f"run_{run_id:03d}.log"
-        self._log_file = open(log_path, "w")
+        self._log_file = open(log_path, "w")  # noqa: SIM115
         self._orig_stdout = sys.stdout
         self._orig_stderr = sys.stderr
         sys.stdout = _TeeWriter(self._orig_stdout, self._log_file)

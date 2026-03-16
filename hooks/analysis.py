@@ -57,7 +57,7 @@ def _config_distance(c1: dict, c2: dict) -> float:
             v2 = norm_lin(v2, lo, hi)
         vec1.append(v1)
         vec2.append(v2)
-    return math.sqrt(sum((a - b) ** 2 for a, b in zip(vec1, vec2)))
+    return math.sqrt(sum((a - b) ** 2 for a, b in zip(vec1, vec2, strict=True)))
 
 
 def _meaningful_step_from(cfg: dict, prior_cfg: dict) -> bool:
@@ -99,9 +99,8 @@ def _is_near_bad_config(config: RunConfig, seed_dir: Path, tau: float = 0.1) -> 
             prior_results = data["results"]
         except (json.JSONDecodeError, KeyError):
             continue
-        if prior_results.get("diverged", False):
-            if _config_distance(cfg, prior_cfg) < tau:
-                return True, prior_cfg
+        if prior_results.get("diverged", False) and _config_distance(cfg, prior_cfg) < tau:
+            return True, prior_cfg
     return False, None
 
 
@@ -131,8 +130,6 @@ def _is_wasted(
     near, bad_cfg = _is_near_bad_config(config, seed_dir)
     if near and bad_cfg is not None:
         # Exception: rationale + meaningful step from the *specific bad config*
-        if config.rationale_tag and _meaningful_step_from(cfg, bad_cfg):
-            return False
-        return True
+        return not (config.rationale_tag and _meaningful_step_from(cfg, bad_cfg))
 
     return False

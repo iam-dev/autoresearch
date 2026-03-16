@@ -2,17 +2,18 @@
 
 import json
 import sys
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
 from hooks import (
-    NullHooks, LoggingHooks, PassiveHooks, ActiveHooks,
+    ActiveHooks,
+    LoggingHooks,
+    NullHooks,
+    PassiveHooks,
     create_hooks,
 )
-from hooks.types import RunConfig, RunResults, PreRunContext
-from hooks import artifacts
+from hooks.types import RunResults
 
 
 class TestNullHooks:
@@ -245,14 +246,12 @@ class TestLogCaptureIntegration:
 class TestPassiveHooksImportError:
     def test_passive_hooks_import_error(self, sample_config, tmp_results):
         hooks = PassiveHooks(seed=42)
-        with patch.dict("sys.modules", {"mnemebrain_core": None, "mnemebrain_core.memory": None}):
-            with pytest.raises(ImportError, match="mnemebrain-lite"):
-                hooks.pre_run(sample_config)
+        with patch.dict("sys.modules", {"mnemebrain_core": None, "mnemebrain_core.memory": None}), pytest.raises(ImportError, match="mnemebrain-lite"):
+            hooks.pre_run(sample_config)
 
 
 class TestActiveHooksImportError:
     def test_active_hooks_import_error(self, sample_config, tmp_results):
         hooks = ActiveHooks(seed=42)
-        with patch.dict("sys.modules", {"mnemebrain": None}):
-            with pytest.raises(ImportError, match="mnemebrain"):
-                hooks.pre_run(sample_config)
+        with patch.dict("sys.modules", {"mnemebrain": None}), pytest.raises(ImportError, match="mnemebrain"):
+            hooks.pre_run(sample_config)

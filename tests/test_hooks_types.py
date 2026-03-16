@@ -1,11 +1,10 @@
 """Tests for hooks/types.py — data contract validation."""
 
 from hooks.types import (
-    RunConfig,
-    RunResults,
     PredictionResult,
-    RecommendationResult,
     PreRunContext,
+    RecommendationResult,
+    RunConfig,
 )
 
 

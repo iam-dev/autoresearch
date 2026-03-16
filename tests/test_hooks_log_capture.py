@@ -1,7 +1,6 @@
 """Tests for hooks/log_capture.py."""
 
 import sys
-from pathlib import Path
 
 from hooks.log_capture import LogCapture
 

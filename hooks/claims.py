@@ -33,10 +33,7 @@ class ClaimBuilder:
 
     def outcome_claim(self, config: RunConfig, results: RunResults) -> StructuredClaim:
         """Post-run: build a claim recording what happened."""
-        if results.diverged:
-            outcome_type = "diverged"
-        else:
-            outcome_type = "achieved"
+        outcome_type = "diverged" if results.diverged else "achieved"
 
         context_factors = [f"loss_trend={results.loss_trend}"]
         if results.grad_norm_max > 5.0:

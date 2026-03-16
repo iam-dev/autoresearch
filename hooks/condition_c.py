@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import os
 
-from hooks.types import PreRunContext, RunConfig, RunResults
 from hooks import artifacts
-from hooks.log_capture import LogCapture
 from hooks.analysis import evidence_weight
 from hooks.claims import ClaimBuilder
+from hooks.log_capture import LogCapture
+from hooks.types import PreRunContext, RunConfig, RunResults
 
 
 class PassiveHooks:
@@ -34,11 +34,11 @@ class PassiveHooks:
             try:
                 from mnemebrain_core.memory import BeliefMemory
                 self._memory = BeliefMemory(db_path=self._db_path, device="cpu")
-            except ImportError:
+            except ImportError as e:
                 raise ImportError(
                     "Condition C requires mnemebrain-lite[embeddings]. "
                     "Install with: pip install mnemebrain-lite[embeddings]"
-                )
+                ) from e
             except TypeError:
                 from mnemebrain_core.memory import BeliefMemory
                 self._memory = BeliefMemory(db_path=self._db_path)
@@ -74,11 +74,11 @@ class PassiveHooks:
         similar_runs = similar_runs[:5]
 
         if contradictions:
-            print(f"\n[Condition C] Contradictions detected:")
+            print("\n[Condition C] Contradictions detected:")
             for c in contradictions:
                 print(f"  {c}")
         if similar_runs:
-            print(f"\n[Condition C] Similar prior runs:")
+            print("\n[Condition C] Similar prior runs:")
             for s in similar_runs:
                 print(f"  {s}")
         if not contradictions and not similar_runs:

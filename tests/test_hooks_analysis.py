@@ -1,23 +1,20 @@
 """Tests for hooks/analysis.py — evidence weight, config distance, wasted-run logic."""
 
-import json
 import math
 from dataclasses import asdict
-from pathlib import Path
 
 import pytest
 
-from hooks.types import RunConfig, RunResults
-from hooks import artifacts
-from hooks.artifacts import _write_run_result
 from hooks.analysis import (
-    evidence_weight,
     _config_distance,
-    _meaningful_step_from,
     _is_exact_duplicate,
     _is_near_bad_config,
     _is_wasted,
+    _meaningful_step_from,
+    evidence_weight,
 )
+from hooks.artifacts import _write_run_result
+from hooks.types import RunConfig, RunResults
 
 
 class TestEvidenceWeight:
