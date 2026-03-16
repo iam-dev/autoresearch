@@ -12,9 +12,10 @@ To set up a new experiment, work with the user to:
    - `README.md` — repository context.
    - `prepare.py` — fixed constants, data prep, tokenizer, dataloader, evaluation. Do not modify.
    - `train.py` — the file you modify. Model architecture, optimizer, training loop.
+   - `hooks/` — experiment hooks package. Handles log capture, result recording, and condition logic automatically. You don't need to modify this.
+   - `mnemebrain_hooks.py` — shim that re-exports the hooks package.
 4. **Verify data exists**: Check that `~/.cache/autoresearch/` contains data shards and a tokenizer. If not, tell the human to run `uv run prepare.py`.
-5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
-6. **Confirm and go**: Confirm setup looks good.
+5. **Confirm and go**: Confirm setup looks good. (Results are logged automatically by the hooks framework as JSON files under `results/runs/`.)
 
 Once you get confirmation, kick off the experimentation.
 
@@ -55,36 +56,18 @@ num_params_M:     50.3
 depth:            8
 ```
 
-Note that the script is configured to always stop after 5 minutes, so depending on the computing platform of this computer the numbers might look different. You can extract the key metric from the log file:
-
-```
-grep "^val_bpb:" run.log
-```
+Note that the script is configured to always stop after 5 minutes, so depending on the computing platform of this computer the numbers might look different.
 
 ## Logging results
 
-When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-separated — commas break in descriptions).
+Results are logged **automatically** by the hooks framework. When `train.py` finishes (or crashes), `post_run()` writes a JSON file to `results/runs/condition_X/seed_YY/run_NNN.json` containing the full config, metrics, and rationale. You do **not** need to maintain a `results.tsv` or manually record results.
 
-The TSV has a header row and 5 columns:
+Log files are also captured automatically by the hooks (via `start_log_capture()` / `stop_log_capture()`), so you do **not** need to redirect output with `> run.log 2>&1`. Logs are written to the same run directory as `run_NNN.log`.
 
-```
-commit	val_bpb	memory_gb	status	description
-```
-
-1. git commit hash (short, 7 chars)
-2. val_bpb achieved (e.g. 1.234567) — use 0.000000 for crashes
-3. peak memory in GB, round to .1f (e.g. 12.3 — divide peak_vram_mb by 1024) — use 0.0 for crashes
-4. status: `keep`, `discard`, or `crash`
-5. short text description of what this experiment tried
-
-Example:
+You can still grep the log for quick checks if needed:
 
 ```
-commit	val_bpb	memory_gb	status	description
-a1b2c3d	0.997900	44.0	keep	baseline
-b2c3d4e	0.993200	44.2	keep	increase LR to 0.04
-c3d4e5f	1.005000	44.0	discard	switch to GeLU activation
-d4e5f6g	0.000000	0.0	crash	double model width (OOM)
+grep "^val_bpb:" results/runs/condition_*/seed_*/run_*.log | tail -1
 ```
 
 ## The experiment loop
@@ -96,18 +79,18 @@ LOOP FOREVER:
 1. Look at the git state: the current branch/commit we're on
 2. Tune `train.py` with an experimental idea by directly hacking the code.
 3. git commit
-4. Run the experiment: `uv run train.py > run.log 2>&1` (redirect everything — do NOT use tee or let output flood your context)
-5. Read out the results: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
-6. If the grep output is empty, the run crashed. Run `tail -n 50 run.log` to read the Python stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
-7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
-8. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
-9. If val_bpb is equal or worse, you git reset back to where you started
+4. Run the experiment: `uv run train.py` (hooks handle log capture and result recording automatically — no need for shell redirection)
+5. Read the printed summary for val_bpb and peak_vram_mb. If the run crashed (no summary printed), check the latest log file in `results/runs/` for the stack trace and attempt a fix. If you can't get things to work after more than a few attempts, give up.
+6. If val_bpb improved (lower), you "advance" the branch, keeping the git commit
+7. If val_bpb is equal or worse, you git reset back to where you started
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate. If you feel like you're getting stuck in some way, you can rewind but you should probably do this very very sparingly (if ever).
 
 **Timeout**: Each experiment should take ~5 minutes total (+ a few seconds for startup and eval overhead). If a run exceeds 10 minutes, kill it and treat it as a failure (discard and revert).
 
-**Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
+**Crashes**: If a run crashes (OOM, or a bug, or etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it and move on (the hooks will have recorded the crash automatically).
+
+**Conditions**: The experiment framework supports multiple conditions (A/B/C/D) via the `AUTORESEARCH_CONDITION` env var. The default is A (no memory — hooks do minimal work). You don't need to manage conditions; they are set externally by the experiment launcher. The `SEED` constant in `train.py` is also configurable via `AUTORESEARCH_SEED`.
 
 **NEVER STOP**: Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from a computer and expects you to continue working *indefinitely* until you are manually stopped. You are autonomous. If you run out of ideas, think harder — read papers referenced in the code, re-read the in-scope files for new angles, try combining previous near-misses, try more radical architectural changes. The loop runs until the human interrupts you, period.
 
