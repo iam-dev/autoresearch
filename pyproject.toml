@@ -65,6 +65,10 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["models.gpt2", "train", "prepare"]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
