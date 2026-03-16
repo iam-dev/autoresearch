@@ -23,17 +23,17 @@ Scientific comparison: does structured belief memory improve autonomous ML exper
   ```json
   {
     "run_id": 12,
-    "config": {"lr": 0.06, "wd": 0.1, "depth": 8},
+    "config": {"matrix_lr": 0.08, "embedding_lr": 0.6, "wd": 0.2, "depth": 4, "total_batch_size": 65536},
     "outcome": {"val_bpb": 1.92, "diverged": true},
     "signals": {"grad_norm_max": 9.1, "loss_trend": "diverging", "final_step": 342},
-    "summary": "LR 0.06 diverged around step 200"
+    "summary": "matrix_lr 0.08 diverged around step 200"
   }
   ```
 - **Purpose:** Controls for "more observability." If C beats B, the gain comes from belief structure, not just having notes.
 
 ### Condition C — Passive MnemeBrain
 - **What:** MnemeBrain stores/retrieves beliefs across runs. Surfaces contradictions, confidence, similar prior runs. Does NOT suggest parameter changes.
-- **Changes to train.py:** Post-run: record result as belief via sidecar. Pre-run: print belief context.
+- **Changes to train.py:** Post-run: record result as belief via mnemebrain-lite. Pre-run: print belief context.
 - **What C adds over B:**
   - Belnap four-valued logic: contradictions are first-class (BOTH state)
   - Evidence-weighted confidence ranking
@@ -44,7 +44,7 @@ Scientific comparison: does structured belief memory improve autonomous ML exper
 
 ### Condition D — Active MnemeBrain
 - **What:** Everything in C, plus pre-run recommendation and sandbox prediction
-- **Changes to train.py:** Pre-run: query sidecar for prediction + recommendation
+- **Changes to train.py:** Pre-run: query mnemebrain-lite for prediction + recommendation
 - **What D adds over C:**
   - **Prediction:** Before each run, fork a BeliefSandbox and predict outcome:
     ```
@@ -89,19 +89,25 @@ All hyperparameter experiments operate within these bounds. Defined upfront so t
 
 | Parameter | Range | Scale | Normalization |
 |-----------|-------|-------|---------------|
-| lr | 0.001–0.1 | log | normalize in log10 space: `(log10(lr) - log10(0.001)) / (log10(0.1) - log10(0.001))` |
-| wd | 0.0–0.2 | linear | min-max: `wd / 0.2` |
-| depth | 4–16 | integer | min-max: `(depth - 4) / 12` |
-| batch_size | 16–64 | discrete | min-max: `(bs - 16) / 48` |
-| warmup | 0.0–0.2 | linear | min-max: `warmup / 0.2` |
+| matrix_lr | 0.005–0.2 | log | normalize in log10 space |
+| embedding_lr | 0.05–2.0 | log | normalize in log10 space |
+| scalar_lr | 0.05–2.0 | log | normalize in log10 space |
+| unembedding_lr | 0.0005–0.02 | log | normalize in log10 space |
+| wd | 0.0–0.4 | linear | min-max: `wd / 0.4` |
+| depth | 2–16 | integer | min-max: `(depth - 2) / 14` |
+| total_batch_size | 16384–524288 | log | normalize in log2 space |
+| warmup_ratio | 0.0–0.2 | linear | min-max: `warmup / 0.2` |
+| warmdown_ratio | 0.0–0.8 | linear | min-max: `warmdown / 0.8` |
 
-**Config distance:** L2 over the normalized parameter vector (with LR in log space).
+Note: The nanochat model uses 4 separate learning rates (Muon optimizer for matrix params, AdamW for embeddings/scalars). The `lr` shorthand in RunConfig maps to `matrix_lr` — the highest-leverage knob. The full LR vector is stored in run artifacts for analysis.
+
+**Config distance:** L2 over the normalized parameter vector (all LRs in log space).
 
 **"Meaningful step" thresholds** (for determining whether a near-bad-config run is a deliberate probe):
-- LR: changed by ≥2× (one octave in log space)
+- matrix_lr: changed by ≥2× (one octave in log space)
 - depth: changed by ≥2 layers
-- warmup: changed by ≥0.05 absolute
-- batch_size: changed by ≥1 discrete step (e.g., 16→32)
+- warmup_ratio: changed by ≥0.05 absolute
+- total_batch_size: changed by ≥2× (one octave in log2 space)
 - wd: changed by ≥0.05 absolute
 
 ## Decomposition (Why This Design Is Strong)
@@ -200,7 +206,7 @@ This third level is crucial — it prevents overgeneralization and demonstrates 
 
 ## Results Directory
 
-All experiment results are written to `results/` at the project root (`/Users/in615bac/Documents/MnemeBrain/mnemebrain-labs/autoresearch/results/`). This provides a single location for both human and AI review.
+All experiment results are written to `results/` at the project root. This provides a single location for both human and AI review.
 
 ### Directory Structure
 
@@ -243,11 +249,16 @@ results/
   "seed": 42,
   "timestamp": "2026-03-16T14:32:00Z",
   "config": {
-    "lr": 0.03,
-    "wd": 0.1,
-    "depth": 8,
-    "batch_size": 32,
-    "warmup": 0.1
+    "matrix_lr": 0.04,
+    "embedding_lr": 0.6,
+    "unembedding_lr": 0.004,
+    "scalar_lr": 0.5,
+    "wd": 0.2,
+    "depth": 4,
+    "total_batch_size": 65536,
+    "device_batch_size": 16,
+    "warmup_ratio": 0.0,
+    "warmdown_ratio": 0.5
   },
   "results": {
     "val_bpb": 1.872,
@@ -389,14 +400,24 @@ from dataclasses import dataclass, field
 
 @dataclass
 class RunConfig:
-    lr: float
+    matrix_lr: float
+    embedding_lr: float
+    unembedding_lr: float
+    scalar_lr: float
     wd: float
     depth: int
-    batch_size: int
-    warmup: float
+    total_batch_size: int
+    device_batch_size: int
+    warmup_ratio: float
+    warmdown_ratio: float
     seed: int
     rationale_tag: str = ""  # Short structured label for audit/exception logic (e.g., "ablate_lr_near_failure")
     rationale: str = ""      # Optional human-readable explanation stored in run artifacts
+
+    @property
+    def lr(self) -> float:
+        """Shorthand for matrix_lr — the highest-leverage knob."""
+        return self.matrix_lr
 
 @dataclass
 class RunResults:
@@ -450,21 +471,27 @@ class ExperimentHooks(Protocol):
 
 class NullHooks:       # Condition A — returns empty PreRunContext, no-op post_run
 class LoggingHooks:    # Condition B — JSONL read/write, summaries in PreRunContext
-class PassiveHooks:    # Condition C — sidecar believe/search/context, contradictions populated
-class ActiveHooks:     # Condition D — sidecar + sandbox + predict + recommend (all fields populated)
+class PassiveHooks:    # Condition C — mnemebrain-lite believe/search/context, contradictions populated
+class ActiveHooks:     # Condition D — mnemebrain-lite + sandbox + predict + recommend (all fields populated)
 ```
 
-### Changes to train.py (minimal, ~8 lines)
+### Changes to train.py (minimal, ~15 lines)
 
 ```python
 # Near top:
 from mnemebrain_hooks import create_hooks, RunConfig, RunResults
 hooks = create_hooks()  # reads AUTORESEARCH_CONDITION env var (A/B/C/D)
 
+# Add a SEED constant (currently hardcoded as torch.manual_seed(42)):
+SEED = 42
+
 # Before training loop:
 run_config = RunConfig(
-    lr=MATRIX_LR, wd=WEIGHT_DECAY, depth=DEPTH,
-    batch_size=TOTAL_BATCH_SIZE, warmup=WARMUP_RATIO, seed=SEED,
+    matrix_lr=MATRIX_LR, embedding_lr=EMBEDDING_LR,
+    unembedding_lr=UNEMBEDDING_LR, scalar_lr=SCALAR_LR,
+    wd=WEIGHT_DECAY, depth=DEPTH,
+    total_batch_size=TOTAL_BATCH_SIZE, device_batch_size=DEVICE_BATCH_SIZE,
+    warmup_ratio=WARMUP_RATIO, warmdown_ratio=WARMDOWN_RATIO, seed=SEED,
 )
 run_context = hooks.pre_run(run_config)
 
@@ -504,29 +531,85 @@ This is computed from values already available in train.py at end of training.
 
 | File | Change |
 |------|--------|
-| `train.py` | Add ~8 lines: import hooks, pre_run before loop, post_run after eval |
-| `autoresearch-mnemebrain/server.py` | Add `POST /predict` and `GET /recommend` endpoints (Condition D) |
-| `models/__init__.py` | No change needed for core experiment |
+| `train.py` | Add ~15 lines: import hooks, SEED constant, pre_run before loop, post_run after eval |
+| `pyproject.toml` | Add `mnemebrain-lite[embeddings]` and `mnemebrain` as optional deps (e.g. `[project.optional-dependencies] experiment = [...]`) |
 
 ## Files NOT Modified
 - `prepare.py` (frozen)
 - `models/nanochat.py`, `models/base.py`
 - `platform_config.py`
+- `models/__init__.py`
 
-## Sidecar Additions Needed
+## MnemeBrain Integration
 
-Existing endpoints sufficient for Conditions B and C. Condition D needs:
+### Packages
 
+| Package | PyPI | Version | Purpose |
+|---------|------|---------|---------|
+| `mnemebrain-lite` | [mnemebrain-lite](https://pypi.org/project/mnemebrain-lite/) | 0.1.0a6 | Belief-state engine: BeliefMemory, Belnap logic, Kuzu graph DB, FastAPI server |
+| `mnemebrain` | [mnemebrain](https://pypi.org/project/mnemebrain/) | 1.0.0a4 | Python SDK: HTTP client wrapping mnemebrain-lite's API |
+
+### Install variants
+
+```bash
+pip install mnemebrain-lite                # core only (no embeddings)
+pip install mnemebrain-lite[embeddings]    # + local sentence-transformers
+pip install mnemebrain-lite[openai]        # + OpenAI embeddings (set OPENAI_API_KEY)
+pip install mnemebrain-lite[all]           # everything (api + embeddings + openai)
 ```
-POST /predict
-  Body: { config: {lr, wd, depth, batch_size, warmup} }
-  → Forks BeliefSandbox, checks config against known beliefs
-  → Returns: { expected_outcome, confidence, similar_runs, risks }
 
-GET /recommend
-  → Returns: { suggested_change, rationale, risk_level }
-  → Based on: goals, untested regions, contradiction resolution
+Note: Intel Mac users should use the `[openai]` variant since PyTorch no longer provides x86_64 macOS wheels for sentence-transformers.
+
+### Usage by condition
+
+| Condition | Dependency | How used |
+|-----------|-----------|----------|
+| A (NullHooks) | None | No MnemeBrain dependency |
+| B (LoggingHooks) | None | Plain JSONL read/write, no external deps |
+| C (PassiveHooks) | `mnemebrain-lite[embeddings]` | Direct Python API: `BeliefMemory.believe()`, `.revise()`, `.explain()` |
+| D (ActiveHooks) | `mnemebrain-lite[embeddings]` + `mnemebrain` | SDK client for prediction/recommendation via mnemebrain-lite API server |
+
+### Condition C — Direct library usage (no server needed)
+
+```python
+from mnemebrain_core.memory import BeliefMemory
+from mnemebrain_core.providers.base import EvidenceInput
+
+memory = BeliefMemory(db_path="./results/beliefs")
+
+# Post-run: record observation as belief
+memory.believe(
+    claim=f"matrix_lr={config.matrix_lr} depth={config.depth} achieved val_bpb={results.val_bpb}",
+    evidence=[EvidenceInput(
+        source_ref=f"run_{run_id}",
+        content=f"val_bpb={results.val_bpb}, steps={results.steps}, diverged={results.diverged}",
+        polarity="supports" if results.val_bpb < best_val_bpb else "attacks",
+        weight=evidence_weight(results.val_bpb, best_val_bpb),
+        reliability=0.95,
+    )]
+)
+
+# Pre-run: surface contradictions and similar runs
+context = memory.explain(claim=f"matrix_lr={config.matrix_lr} improves training")
+# → truth_state, supporting_count, attacking_count, evidence chain
 ```
+
+### Condition D — API server + SDK client
+
+```bash
+# Start mnemebrain-lite server (built-in FastAPI, port 8000):
+mnemebrain  # or: python -m mnemebrain_core
+```
+
+```python
+# In ActiveHooks, use the mnemebrain SDK client:
+from mnemebrain import MnemeBrainClient
+
+client = MnemeBrainClient(base_url="http://localhost:8000")
+# believe, revise, explain, etc. via HTTP
+```
+
+Condition D prediction/recommendation logic lives in `mnemebrain_hooks.py` (ActiveHooks), NOT in the mnemebrain-lite server. ActiveHooks queries the belief store via the SDK, then applies its own reasoning to generate predictions and recommendations.
 
 ## Execution Sequence
 
@@ -540,24 +623,25 @@ AUTORESEARCH_CONDITION=A uv run train.py
 
 # Condition B (structured logging):
 AUTORESEARCH_CONDITION=B uv run train.py
-cat experiment_log.jsonl  # verify structured output
+cat results/experiment_log.jsonl  # verify structured output
 
-# Condition C (passive MnemeBrain — start sidecar first):
-cd ../autoresearch-mnemebrain && uv run python -m server &
+# Condition C (passive MnemeBrain — uses mnemebrain-lite as library, CPU-only, no server needed):
+pip install mnemebrain-lite[embeddings]  # or: uv pip install mnemebrain-lite[embeddings]
 AUTORESEARCH_CONDITION=C uv run train.py
-curl http://localhost:7432/context  # verify beliefs stored
+ls results/beliefs/  # verify Kuzu graph DB created
+# Note: BeliefMemory runs embeddings on CPU only (device="cpu") to avoid GPU contention
 
-# Condition D (active MnemeBrain — start full stack):
-docker-compose -f ../autoresearch-mnemebrain/docker-compose.yml up -d
+# Condition D (active MnemeBrain — start mnemebrain-lite API server on CPU only):
+CUDA_VISIBLE_DEVICES="" mnemebrain &  # starts FastAPI server on port 8000, CPU-only
 AUTORESEARCH_CONDITION=D uv run train.py
 # Verify: prediction + recommendation printed before training starts
-
+curl http://localhost:8000/docs  # OpenAPI docs for mnemebrain-lite
 ```
 
 ## Existing Code to Reuse
 
-- `autoresearch-mnemebrain/server.py` — 6 existing endpoints (needs 2 new for D)
-- `mnemebrain-python` SDK — MnemeBrainClient, sandbox, revision, attacks, goals
+- `mnemebrain-lite` (PyPI) — BeliefMemory, Belnap 4-valued logic, Kuzu graph DB, FastAPI server, believe/revise/retract/explain API
+- `mnemebrain` SDK (PyPI) — MnemeBrainClient HTTP client wrapping mnemebrain-lite's API
 - `models/__init__.py` — Model registry + create_model() factory
 - `models/base.py` — TrainableModel protocol
 - `platform_config.py` — Hardware detection singleton
@@ -599,10 +683,10 @@ Better: **"Structured belief memory reduces wasted experiments and reaches good 
      "run_id": 12,
      "timestamp": "2026-03-16T14:32:00Z",
      "seed": 42,
-     "config": {"lr": 0.06, "wd": 0.1, "depth": 8},
+     "config": {"matrix_lr": 0.08, "embedding_lr": 0.6, "wd": 0.2, "depth": 4, "total_batch_size": 65536},
      "outcome": {"val_bpb": 1.92, "diverged": true},
      "signals": {"grad_norm_max": 9.1, "loss_trend": "diverging", "final_step": 342},
-     "summary": "LR 0.06 diverged around step 200"
+     "summary": "matrix_lr 0.08 diverged around step 200"
    }
    ```
 
@@ -614,9 +698,9 @@ Better: **"Structured belief memory reduces wasted experiments and reaches good 
 
 1. **Step 1:** Create `mnemebrain_hooks.py` with NullHooks + LoggingHooks (Conditions A & B)
 2. **Step 1b:** Run 3-5 Condition A runs → establish baseline val_bpb mean/variance
-3. **Step 2:** Implement PassiveHooks (Condition C) + finalize sidecar weight formula
+3. **Step 2:** Implement PassiveHooks (Condition C) using `mnemebrain-lite` as a library (direct `BeliefMemory` API, no server) + finalize evidence weight formula
 4. **Step 2b:** Run 3-5 Condition B then C runs → sanity check pipeline
-5. **Step 3:** Implement ActiveHooks (Condition D) + predict/recommend endpoints
+5. **Step 3:** Implement ActiveHooks (Condition D) using full `mnemebrain` (not mnemebrain-lite) — prediction/recommendation logic in ActiveHooks, belief queries via mnemebrain SDK
 6. **Step 4:** Full Protocol 1 (N=5 pilot first, then N=20 if signal found)
 7. **Step 5:** Protocol 3 (contradictory regime) — only if Protocol 1 shows signal
 8. **Step 6:** BSM Transformer — only after Protocol 1 analysis complete
@@ -667,3 +751,46 @@ Additional refinements:
 - D* positioned as pre-registered supplemental condition, not part of core A/B/C/D ladder
 
 **Status: Design frozen. Ready for Step 1 implementation.**
+
+## v4 Patch Log (2026-03-16)
+
+Replaced custom sidecar with published PyPI packages and aligned config schema with actual codebase.
+
+| Patch | Section | What Changed |
+|-------|---------|-------------|
+| 1. Package references | Multiple | `autoresearch-mnemebrain/server.py` → `mnemebrain-lite` (PyPI, v0.1.0a6); `mnemebrain-python` SDK → `mnemebrain` (PyPI, v1.0.0a4) |
+| 2. Hardcoded path | Results Directory | Removed `/Users/in615bac/...` absolute path, now relative `results/` |
+| 3. Config search space | Config Search Space | Single `lr` → 4 separate LRs (matrix_lr, embedding_lr, unembedding_lr, scalar_lr); `batch_size` → `total_batch_size` (log2 scale); added `warmdown_ratio`; adjusted ranges to match actual MPS/CUDA configs |
+| 4. RunConfig fields | Typed Data Contracts | Expanded to match train.py: 4 LRs, total/device batch size, warmup/warmdown ratios, SEED constant; added `lr` property as shorthand for matrix_lr |
+| 5. train.py integration | Changes to train.py | Updated to ~15 lines reflecting actual variable names; added SEED constant extraction |
+| 6. Condition C architecture | MnemeBrain Integration | Direct `BeliefMemory` library usage (no server needed for C); server only needed for D |
+| 7. Condition D architecture | MnemeBrain Integration, Execution Sequence | Uses full `mnemebrain` package (not mnemebrain-lite) for prediction/recommendation; prediction logic lives in ActiveHooks, not in the server |
+| 8. Run result schema | Run Result Schema | Config fields updated to match new RunConfig (4 LRs, batch sizes, warmdown) |
+| 9. Files to Modify | Files to Modify | Removed `autoresearch-mnemebrain/server.py`; added `pyproject.toml` for optional deps |
+| 10. Verification commands | Verification | Updated for `mnemebrain-lite` library/server usage instead of custom sidecar |
+
+**Status: Design updated. Ready for Step 1 implementation.**
+
+## v5 Patch Log (2026-03-16)
+
+GPU resource fairness: mnemebrain-lite must run on CPU only.
+
+| Patch | Section | What Changed |
+|-------|---------|-------------|
+| 1. CPU-only sidecar | MnemeBrain Integration, Condition C, Condition D | mnemebrain-lite's embedding model (sentence-transformers) MUST run on CPU, not GPU. Without this, Conditions C/D pay a hidden GPU memory tax that A/B don't — unfair comparison. Enforced via `CUDA_VISIBLE_DEVICES=""` for the mnemebrain-lite server (Condition D) and `device="cpu"` for direct BeliefMemory usage (Condition C). |
+| 2. Condition C enforcement | PassiveHooks | `BeliefMemory` initialized with `device="cpu"` to prevent sentence-transformers from loading onto GPU/MPS. Also set `TOKENIZERS_PARALLELISM=false` to avoid fork warnings. |
+| 3. Condition D enforcement | ActiveHooks, Verification | mnemebrain-lite server must be started with `CUDA_VISIBLE_DEVICES="" mnemebrain` to force CPU-only inference. |
+| 4. Train.py telemetry | Changes to train.py | grad_norm sampled every 50 steps (not every step) to minimize hot-loop overhead; loss_trend derived from actual final-20% comparison instead of threshold heuristic; diverged runs now recorded via post_run before exit(1) |
+| 5. Wasted-run logic | mnemebrain_hooks.py | `_has_meaningful_step` now checks against the specific nearby bad config, not any prior config |
+
+### Resource Isolation Rationale
+
+The core experiment asks: "does structured belief memory help select better hyperparameters?" If mnemebrain-lite's embedding model consumes GPU VRAM (even a few hundred MB), Conditions C and D train with less effective memory than A and B. This creates a confound: any performance difference could be attributed to resource competition rather than better experiment selection.
+
+**Rule:** All mnemebrain-lite computation (embeddings, graph queries, belief operations) runs on CPU only. The GPU is reserved exclusively for training. This applies to both:
+- **Condition C** (in-process library) — `BeliefMemory(device="cpu")`
+- **Condition D** (separate server) — `CUDA_VISIBLE_DEVICES="" mnemebrain`
+
+Since mnemebrain operations happen BETWEEN runs (not during), the CPU overhead doesn't affect training throughput — it only adds a few seconds of pre/post-run latency, which is not measured.
+
+**Status: Design updated. v5 applied.**

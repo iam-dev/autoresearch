@@ -22,6 +22,7 @@ from platform_config import PLATFORM
 from models import create_model, REGISTRY
 from models.nanochat import GPT, GPTConfig, MuonAdamW, build_model_config
 from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, make_dataloader, evaluate_bpb
+from mnemebrain_hooks import create_hooks, RunConfig, RunResults
 
 MODEL_NAME = os.environ.get("AUTORESEARCH_MODEL", "nanochat")
 
@@ -72,10 +73,12 @@ DEVICE_BATCH_SIZE = int(os.environ.get("AUTORESEARCH_DEVICE_BATCH", _cfg["hardwa
 # Setup: tokenizer, model, optimizer, dataloader
 # ---------------------------------------------------------------------------
 
+SEED = int(os.environ.get("AUTORESEARCH_SEED", 42))
+
 t_start = time.time()
-torch.manual_seed(42)
+torch.manual_seed(SEED)
 if PLATFORM.kind == "cuda":
-    torch.cuda.manual_seed(42)
+    torch.cuda.manual_seed(SEED)
 torch.set_float32_matmul_precision("high")
 device = PLATFORM.device
 autocast_dtype = torch.bfloat16 if PLATFORM.supports_bf16 else (torch.float16 if PLATFORM.supports_fp16 else torch.float32)
@@ -146,6 +149,18 @@ x, y, epoch = next(train_loader)  # prefetch first batch
 print(f"Time budget: {TIME_BUDGET}s")
 print(f"Gradient accumulation steps: {grad_accum_steps}")
 
+# --- MnemeBrain hooks: pre-run ---
+hooks = create_hooks(seed=SEED)
+run_config = RunConfig(
+    matrix_lr=MATRIX_LR, embedding_lr=EMBEDDING_LR,
+    unembedding_lr=UNEMBEDDING_LR, scalar_lr=SCALAR_LR,
+    wd=WEIGHT_DECAY, depth=DEPTH,
+    total_batch_size=TOTAL_BATCH_SIZE, device_batch_size=DEVICE_BATCH_SIZE,
+    warmup_ratio=WARMUP_RATIO, warmdown_ratio=WARMDOWN_RATIO, seed=SEED,
+)
+run_context = hooks.pre_run(run_config)
+hooks.start_log_capture(run_config)
+
 # Schedules (all based on progress = training_time / TIME_BUDGET)
 
 def get_lr_multiplier(progress):
@@ -172,6 +187,8 @@ t_start_training = time.time()
 smooth_train_loss = 0
 total_training_time = 0
 step = 0
+grad_norm_max = 0.0
+loss_history: list[float] = []  # smoothed loss at each step, for trend computation
 
 while True:
     if PLATFORM.kind == "cuda": torch.cuda.synchronize()
@@ -194,6 +211,12 @@ while True:
         if group.get('kind') == 'muon':
             group["momentum"] = muon_momentum
             group["weight_decay"] = muon_weight_decay
+    # Track gradient norm for telemetry (sample every 50 steps to avoid overhead)
+    if step % 50 == 0:
+        _gnorm = sum(p.grad.norm().item() ** 2 for p in model.parameters() if p.grad is not None) ** 0.5
+        if _gnorm > grad_norm_max:
+            grad_norm_max = _gnorm
+
     optimizer.step()
     model.zero_grad(set_to_none=True)
 
@@ -201,7 +224,16 @@ while True:
 
     # Fast fail: abort if loss is exploding or NaN
     if math.isnan(train_loss_f) or train_loss_f > 100:
-        print("FAIL")
+        print("\nFAIL — loss diverged")
+        hooks.stop_log_capture()
+        hooks.post_run(
+            config=run_config,
+            results=RunResults(
+                val_bpb=999999.0, steps=step, peak_vram_mb=0.0,
+                final_loss=train_loss_f if not math.isnan(train_loss_f) else 999999.0,
+                mfu=0.0, diverged=True, loss_trend="diverging", grad_norm_max=grad_norm_max,
+            ),
+        )
         exit(1)
 
     if PLATFORM.kind == "cuda": torch.cuda.synchronize()
@@ -215,6 +247,7 @@ while True:
     ema_beta = 0.9
     smooth_train_loss = ema_beta * smooth_train_loss + (1 - ema_beta) * train_loss_f
     debiased_smooth_loss = smooth_train_loss / (1 - ema_beta**(step + 1))
+    loss_history.append(debiased_smooth_loss)
     pct_done = 100 * progress
     tok_per_sec = int(TOTAL_BATCH_SIZE / dt)
     mfu = 100 * num_flops_per_token * TOTAL_BATCH_SIZE / dt / H100_BF16_PEAK_FLOPS
@@ -261,3 +294,35 @@ print(f"total_tokens_M:   {total_tokens / 1e6:.1f}")
 print(f"num_steps:        {step}")
 print(f"num_params_M:     {num_params / 1e6:.1f}")
 print(f"depth:            {DEPTH}")
+
+# --- MnemeBrain hooks: post-run ---
+hooks.stop_log_capture()
+# Derive loss trend from final 20% of training
+_diverged = math.isnan(debiased_smooth_loss) or debiased_smooth_loss > 100
+if _diverged:
+    _loss_trend = "diverging"
+elif len(loss_history) > 20:
+    # Compare mean of final 20% to mean of preceding 20%
+    n = len(loss_history)
+    tail_start = int(n * 0.8)
+    mid_start = int(n * 0.6)
+    tail_mean = sum(loss_history[tail_start:]) / (n - tail_start)
+    mid_mean = sum(loss_history[mid_start:tail_start]) / max(tail_start - mid_start, 1)
+    delta = tail_mean - mid_mean
+    if delta < -0.01:
+        _loss_trend = "improving"
+    elif delta > 0.01:
+        _loss_trend = "diverging"
+    else:
+        _loss_trend = "flat"
+else:
+    _loss_trend = "flat"
+
+hooks.post_run(
+    config=run_config,
+    results=RunResults(
+        val_bpb=val_bpb, steps=step, peak_vram_mb=peak_vram_mb,
+        final_loss=debiased_smooth_loss, mfu=steady_state_mfu,
+        diverged=_diverged, loss_trend=_loss_trend, grad_norm_max=grad_norm_max,
+    ),
+)
