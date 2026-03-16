@@ -1,0 +1,33 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    continue-on-error: true # Allow failure — alpha packages
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Cache .venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-e2e-${{ runner.os }}-3.12-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            venv-e2e-${{ runner.os }}-3.12-
+
+      - name: Install dependencies with experiment extras
+        run: uv sync --dev --extra experiment
+
+      - name: Run E2E tests
+        run: uv run pytest -m e2e --no-cov -v

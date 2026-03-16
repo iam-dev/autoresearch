@@ -132,6 +132,20 @@ class TestGenerateSummary:
         summary = generate_summary("A")
         assert summary["improvement_rate"] < 0  # negative = val_bpb decreasing = good
 
+    def test_single_run_std_is_zero(self, tmp_results):
+        """A single non-diverged run should have std_val_bpb = 0."""
+        _write_run(tmp_results, "A", 1, 1, 1.90)
+        summary = generate_summary("A")
+        assert summary["std_val_bpb"] == 0.0
+
+    def test_all_diverged_best_is_none(self, tmp_results):
+        """When all runs diverged, best_val_bpb should be None."""
+        _write_run(tmp_results, "A", 1, 1, 999999.0, diverged=True)
+        _write_run(tmp_results, "A", 1, 2, 999999.0, diverged=True)
+        summary = generate_summary("A")
+        assert summary["best_val_bpb"] is None
+        assert summary["mean_val_bpb"] is None
+
 
 class TestCohensD:
     def test_identical_groups_zero(self):
@@ -143,6 +157,26 @@ class TestCohensD:
 
     def test_small_groups_return_zero(self):
         assert cohens_d([1.0], [2.0]) == 0.0
+
+    def test_known_value_one_std_apart(self):
+        """Groups with known Cohen's d."""
+        # mean diff = 1.0, both std = 0.5, pooled_std = 0.5, d = -1.0/0.5 = -2.0
+        group1 = [-0.5, 0.0, 0.5]
+        group2 = [0.5, 1.0, 1.5]
+        d = cohens_d(group1, group2)
+        assert abs(d) - 2.0 < 0.01
+
+    def test_symmetric_sign(self):
+        """Swapping groups should flip the sign."""
+        g1 = [1.0, 2.0, 3.0]
+        g2 = [4.0, 5.0, 6.0]
+        d1 = cohens_d(g1, g2)
+        d2 = cohens_d(g2, g1)
+        assert abs(d1 + d2) < 1e-10
+
+    def test_empty_groups_return_zero(self):
+        assert cohens_d([], [1.0, 2.0]) == 0.0
+        assert cohens_d([1.0, 2.0], []) == 0.0
 
 
 class TestGenerateComparison:
@@ -193,11 +227,55 @@ class TestGenerateComparison:
         assert "effect_size_sufficient" in comp["promotion_criteria"]
         assert "stability_details" in comp
 
+    def test_four_conditions(self, tmp_results):
+        """Comparison with all 4 conditions should produce A_vs_B, B_vs_C, C_vs_D pairs."""
+        for i, seed in enumerate([1, 2, 3]):
+            _write_run(tmp_results, "A", seed, 1, 1.95 + i * 0.01)
+            _write_run(tmp_results, "B", seed, 1, 1.90 + i * 0.01)
+            _write_run(tmp_results, "C", seed, 1, 1.85 + i * 0.01)
+            _write_run(tmp_results, "D", seed, 1, 1.80 + i * 0.01)
+        comp = generate_comparison()
+        assert comp is not None
+        assert "A_vs_B" in comp["pairwise_tests"]
+        assert "B_vs_C" in comp["pairwise_tests"]
+        assert "C_vs_D" in comp["pairwise_tests"]
+        assert len(comp["conditions"]) == 4
+
+    def test_promotion_edge_case_all_criteria_met(self, tmp_results):
+        """When all criteria are met, promotion_decision should be 'promote'."""
+        # Create data with large effect sizes to trigger promotion
+        for i, seed in enumerate([1, 2, 3]):
+            _write_run(tmp_results, "A", seed, 1, 2.00 + i * 0.01)
+            _write_run(tmp_results, "B", seed, 1, 1.50 + i * 0.01)
+            _write_run(tmp_results, "C", seed, 1, 1.00 + i * 0.01)
+        comp = generate_comparison()
+        # With these large separations, effect_size should be > 0.3
+        # and directional should be met (B better than A, C better than B)
+        assert comp["promotion_criteria"]["effect_size_sufficient"] is True
+        assert comp["promotion_criteria"]["hooks_stable"] is True
+        assert comp["promotion_criteria"]["telemetry_complete"] is True
+
+    def test_comparison_with_threshold_parameter(self, tmp_results):
+        """generate_comparison should accept and use threshold parameter."""
+        for i, seed in enumerate([1, 2, 3]):
+            _write_run(tmp_results, "A", seed, 1, 1.95 + i * 0.01)
+            _write_run(tmp_results, "A", seed, 2, 1.85 + i * 0.01)
+            _write_run(tmp_results, "B", seed, 1, 1.90 + i * 0.01)
+            _write_run(tmp_results, "B", seed, 2, 1.80 + i * 0.01)
+        comp = generate_comparison(threshold=1.90)
+        assert comp is not None
+        # At least one condition should have mean_runs_to_threshold
+        has_threshold = any(
+            "mean_runs_to_threshold" in v
+            for v in comp["conditions"].values()
+        )
+        assert has_threshold
+
 
 class TestRunsToThresholdGlobal:
     def test_with_fixed_threshold(self, tmp_results):
-        # Seed 1: run 1=1.95, run 2=1.90, run 3=1.85 → hits 1.88 at run 2
-        # Seed 2: run 1=1.90, run 2=1.84 → hits 1.88 at run 2
+        # Seed 1: run 1=1.95, run 2=1.90, run 3=1.85 -> hits 1.88 at run 2
+        # Seed 2: run 1=1.90, run 2=1.84 -> hits 1.88 at run 2
         _write_run(tmp_results, "A", 1, 1, 1.95)
         _write_run(tmp_results, "A", 1, 2, 1.90)
         _write_run(tmp_results, "A", 1, 3, 1.85)
@@ -211,7 +289,7 @@ class TestRunsToThresholdGlobal:
     def test_threshold_not_reached(self, tmp_results):
         _write_run(tmp_results, "A", 1, 1, 1.95)
         _write_run(tmp_results, "A", 1, 2, 1.90)
-        # Threshold too low — never reached
+        # Threshold too low -- never reached
         summary = generate_summary("A", threshold=1.50)
         assert summary["runs_to_threshold"] is None
 
@@ -248,6 +326,55 @@ class TestStabilityChecks:
         assert complete is False
         assert len(missing) > 0
 
+    def test_empty_condition_returns_stable(self, tmp_results):
+        """An empty condition (no runs) should be considered stable."""
+        stable, crashes = _check_stability("A")
+        assert stable is True
+        assert crashes == 0
+
+    def test_empty_condition_returns_complete(self, tmp_results):
+        """An empty condition (no runs) should be considered complete."""
+        complete, missing = _check_telemetry_completeness("A")
+        assert complete is True
+        assert missing == []
+
+    def test_crash_detected_missing_results_fields(self, tmp_results):
+        """A run missing required results fields should count as a crash."""
+        seed_dir = tmp_results / "runs" / "condition_A" / "seed_01"
+        seed_dir.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "run_id": 1,
+            "condition": "A",
+            "seed": 1,
+            "timestamp": "2026-03-16T14:00:00Z",
+            "config": {"matrix_lr": 0.04, "embedding_lr": 0.6, "depth": 4, "total_batch_size": 65536},
+            "results": {"val_bpb": 1.90},  # missing steps, diverged, loss_trend, grad_norm_max
+        }
+        (seed_dir / "run_001.json").write_text(json.dumps(doc))
+        stable, crashes = _check_stability("A")
+        assert stable is False
+        assert crashes == 1
+
+    def test_telemetry_missing_config_fields(self, tmp_results):
+        """A run missing config sub-fields should be flagged as incomplete."""
+        seed_dir = tmp_results / "runs" / "condition_A" / "seed_01"
+        seed_dir.mkdir(parents=True, exist_ok=True)
+        doc = {
+            "run_id": 1,
+            "condition": "A",
+            "seed": 1,
+            "timestamp": "2026-03-16T14:00:00Z",
+            "config": {"matrix_lr": 0.04},  # missing embedding_lr, depth, total_batch_size
+            "results": {
+                "val_bpb": 1.90, "steps": 1000, "diverged": False,
+                "loss_trend": "improving", "grad_norm_max": 3.0,
+            },
+        }
+        (seed_dir / "run_001.json").write_text(json.dumps(doc))
+        complete, missing = _check_telemetry_completeness("A")
+        assert complete is False
+        assert any("config" in m for m in missing)
+
 
 class TestPlots:
     def test_generate_plots_no_data(self, tmp_results):
@@ -262,3 +389,15 @@ class TestPlots:
         assert (plot_dir / "val_bpb_by_condition.png").exists()
         assert (plot_dir / "wasted_run_rate.png").exists()
         assert (plot_dir / "runs_to_threshold.png").exists()
+
+    def test_plot_files_have_nonzero_size(self, tmp_results):
+        """Generated plot files should have non-zero size."""
+        for seed in [1, 2, 3]:
+            _write_run(tmp_results, "A", seed, 1, 1.90 + seed * 0.01)
+            _write_run(tmp_results, "B", seed, 1, 1.85 + seed * 0.01)
+        generate_plots()
+        plot_dir = tmp_results / "plots"
+        for name in ["val_bpb_by_condition.png", "wasted_run_rate.png", "runs_to_threshold.png"]:
+            plot_path = plot_dir / name
+            assert plot_path.exists(), f"{name} should exist"
+            assert plot_path.stat().st_size > 0, f"{name} should have non-zero size"

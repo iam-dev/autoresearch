@@ -19,6 +19,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "cuda: requires NVIDIA GPU")
     config.addinivalue_line("markers", "mps: requires Apple Silicon MPS")
     config.addinivalue_line("markers", "cpu: runs on any platform")
+    config.addinivalue_line("markers", "e2e: end-to-end tests requiring mnemebrain-lite")
 
 
 def pytest_collection_modifyitems(config, items):
