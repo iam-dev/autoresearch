@@ -14,29 +14,6 @@ from hooks.artifacts import (
 )
 
 
-@pytest.fixture
-def sample_config():
-    return RunConfig(
-        matrix_lr=0.04, embedding_lr=0.6, unembedding_lr=0.004,
-        scalar_lr=0.5, wd=0.2, depth=4, total_batch_size=65536,
-        device_batch_size=16, warmup_ratio=0.0, warmdown_ratio=0.5, seed=42,
-    )
-
-
-@pytest.fixture
-def sample_results():
-    return RunResults(
-        val_bpb=1.872, steps=1450, peak_vram_mb=4200.0, final_loss=2.34,
-        mfu=0.38, diverged=False, loss_trend="improving", grad_norm_max=3.2,
-    )
-
-
-@pytest.fixture
-def tmp_results(tmp_path, monkeypatch):
-    monkeypatch.setattr("hooks.artifacts.RESULTS_DIR", tmp_path)
-    return tmp_path
-
-
 class TestNextRunId:
     def test_empty_dir(self, tmp_results):
         run_dir = tmp_results / "runs" / "condition_A" / "seed_42"

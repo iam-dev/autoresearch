@@ -16,21 +16,7 @@ mnemebrain_core = pytest.importorskip(
     reason="mnemebrain-lite not installed (requires Python 3.12+)",
 )
 
-from mnemebrain_hooks import (
-    PassiveHooks,
-    RunConfig,
-    RunResults,
-    evidence_weight,
-)
-
-
-@pytest.fixture
-def sample_config():
-    return RunConfig(
-        matrix_lr=0.04, embedding_lr=0.6, unembedding_lr=0.004,
-        scalar_lr=0.5, wd=0.2, depth=4, total_batch_size=65536,
-        device_batch_size=16, warmup_ratio=0.0, warmdown_ratio=0.5, seed=42,
-    )
+from hooks import PassiveHooks, RunConfig, RunResults, evidence_weight
 
 
 @pytest.fixture
@@ -47,12 +33,6 @@ def bad_results():
         val_bpb=2.10, steps=1000, peak_vram_mb=0, final_loss=3.0,
         mfu=0.30, diverged=False, loss_trend="flat", grad_norm_max=5.0,
     )
-
-
-@pytest.fixture
-def tmp_results(tmp_path, monkeypatch):
-    monkeypatch.setattr("mnemebrain_hooks.RESULTS_DIR", tmp_path)
-    return tmp_path
 
 
 @pytest.mark.e2e

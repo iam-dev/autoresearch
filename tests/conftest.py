@@ -12,6 +12,8 @@ Markers:
 import sys
 import pytest
 
+from hooks.types import RunConfig, RunResults
+
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "unit: fast unit tests")
@@ -39,3 +41,35 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_cuda)
         if "mps" in item.keywords and not has_mps:
             item.add_marker(skip_mps)
+
+
+@pytest.fixture
+def sample_config():
+    return RunConfig(
+        matrix_lr=0.04, embedding_lr=0.6, unembedding_lr=0.004,
+        scalar_lr=0.5, wd=0.2, depth=4, total_batch_size=65536,
+        device_batch_size=16, warmup_ratio=0.0, warmdown_ratio=0.5, seed=42,
+    )
+
+
+@pytest.fixture
+def sample_results():
+    return RunResults(
+        val_bpb=1.872, steps=1450, peak_vram_mb=4200.0, final_loss=2.34,
+        mfu=0.38, diverged=False, loss_trend="improving", grad_norm_max=3.2,
+    )
+
+
+@pytest.fixture
+def diverged_results():
+    return RunResults(
+        val_bpb=float("nan"), steps=342, peak_vram_mb=4200.0, final_loss=100.0,
+        mfu=0.10, diverged=True, loss_trend="diverging", grad_norm_max=9.1,
+    )
+
+
+@pytest.fixture
+def tmp_results(tmp_path, monkeypatch):
+    """Redirect RESULTS_DIR to a temp directory."""
+    monkeypatch.setattr("hooks.artifacts.RESULTS_DIR", tmp_path)
+    return tmp_path
