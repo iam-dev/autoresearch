@@ -1,0 +1,8 @@
+[allowlist]
+  description = "Allowlist for false positives"
+
+  [[allowlist.commits]]
+  # docs/plan-mnemebrain-conditions.md mentions "API" in descriptive text
+  fingerprints = [
+    "573385f5990da76f907ce415fe14800d9b37d65f:docs/plan-mnemebrain-conditions.md:generic-api-key:643",
+  ]
