@@ -56,10 +56,10 @@ WINDOW_PATTERN = _cfg["model"]["window_pattern"]
 
 # Optimization
 TOTAL_BATCH_SIZE = _cfg["optimization"]["total_batch_size"]
-EMBEDDING_LR = _cfg["optimization"]["embedding_lr"] * 0.5  # halved: baseline diverges at step ~17
-UNEMBEDDING_LR = _cfg["optimization"]["unembedding_lr"] * 0.5
-MATRIX_LR = _cfg["optimization"]["matrix_lr"] * 0.5
-SCALAR_LR = _cfg["optimization"]["scalar_lr"] * 0.5
+EMBEDDING_LR = _cfg["optimization"]["embedding_lr"] * 0.25  # 0.25x: testing if further reduction helps
+UNEMBEDDING_LR = _cfg["optimization"]["unembedding_lr"] * 0.25
+MATRIX_LR = _cfg["optimization"]["matrix_lr"] * 0.25
+SCALAR_LR = _cfg["optimization"]["scalar_lr"] * 0.25
 WEIGHT_DECAY = _cfg["optimization"]["weight_decay"]
 ADAM_BETAS = _cfg["optimization"]["adam_betas"]
 WARMUP_RATIO = _cfg["optimization"]["warmup_ratio"]
