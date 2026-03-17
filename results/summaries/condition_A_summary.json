@@ -1,0 +1,31 @@
+{
+  "condition": "A",
+  "total_runs": 13,
+  "seeds_completed": [
+    42
+  ],
+  "best_val_bpb": 2.733262,
+  "mean_val_bpb": 2.82066,
+  "std_val_bpb": 0.119596,
+  "wasted_runs": 5,
+  "wasted_run_rate": 0.3846,
+  "diverged_runs": 0,
+  "improvement_rate": -0.021648,
+  "runs_to_threshold": 12,
+  "threshold_used": null,
+  "val_bpb_trajectory": [
+    3.004971,
+    3.130551,
+    2.889964,
+    2.765669,
+    2.783952,
+    2.779656,
+    2.816756,
+    2.753472,
+    2.754536,
+    2.756328,
+    2.754277,
+    2.733262,
+    2.745192
+  ]
+}

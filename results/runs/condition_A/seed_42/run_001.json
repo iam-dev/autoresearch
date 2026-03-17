@@ -1,0 +1,41 @@
+{
+  "run_id": 1,
+  "condition": "A",
+  "seed": 42,
+  "timestamp": "2026-03-16T19:32:29.978494+00:00",
+  "config": {
+    "matrix_lr": 0.04,
+    "embedding_lr": 0.6,
+    "unembedding_lr": 0.004,
+    "scalar_lr": 0.5,
+    "wd": 0.2,
+    "depth": 4,
+    "total_batch_size": 65536,
+    "device_batch_size": 16,
+    "warmup_ratio": 0.0,
+    "warmdown_ratio": 0.5,
+    "seed": 42
+  },
+  "results": {
+    "val_bpb": 3.004970654124535,
+    "steps": 37,
+    "peak_vram_mb": 0,
+    "final_loss": 8.322165826082841,
+    "mfu": 0.03244802942253275,
+    "diverged": false,
+    "loss_trend": "diverging",
+    "grad_norm_max": 0.17509483251893532
+  },
+  "rationale_tag": "",
+  "rationale": "",
+  "wasted": false,
+  "delta_from_best": 0.0,
+  "pre_run_context": {
+    "condition": "A",
+    "summaries": [],
+    "similar_runs": [],
+    "contradictions": [],
+    "prediction": null,
+    "recommendation": null
+  }
+}
