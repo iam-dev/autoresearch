@@ -64,7 +64,7 @@ WEIGHT_DECAY = _cfg["optimization"]["weight_decay"]
 ADAM_BETAS = _cfg["optimization"]["adam_betas"]
 WARMUP_RATIO = _cfg["optimization"]["warmup_ratio"]
 WARMDOWN_RATIO = _cfg["optimization"]["warmdown_ratio"]
-FINAL_LR_FRAC = _cfg["optimization"]["final_lr_frac"]
+FINAL_LR_FRAC = 0.1  # keep 10% LR at end (loss still decreasing during warmdown)
 
 # Model size (hardware-dependent, not in TOML)
 DEPTH = int(os.environ.get("AUTORESEARCH_DEPTH", PLATFORM.recommended_depth))
