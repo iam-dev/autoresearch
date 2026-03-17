@@ -50,7 +50,7 @@ _cfg = load_platform_config()
 # ---------------------------------------------------------------------------
 
 # Model architecture
-ASPECT_RATIO = _cfg["model"]["aspect_ratio"]
+ASPECT_RATIO = 96  # wider model: n_embd=384 at depth=4 (same width as depth=6)
 HEAD_DIM = _cfg["model"]["head_dim"]
 WINDOW_PATTERN = _cfg["model"]["window_pattern"]
 
